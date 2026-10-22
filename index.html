@@ -203,10 +203,12 @@ function boot(){
   api('me').then(function(r){
     if (!r.ok) { $('main').innerHTML='<div class="err">'+esc(r.error)+'</div>'; return; }
     S.me = r;
-    if (!r.registered) { if (location.hash==='#staff' && r.staff) return go('staff'); return renderRegister(); }
+    var wantStaff = location.hash==='#staff' || /[?&]staff=1/.test(location.search);
+    if (wantStaff && !r.staff) { $('main').innerHTML='<div class="card"><h3>スタッフ画面</h3><p>まだスタッフとして登録されていません。下のIDを本部に送ってください。</p><p style="margin-top:8px;font-weight:700;user-select:all;word-break:break-all">'+esc(r.userId||'')+'</p></div>'; return; }
+    if (!r.registered) { if (wantStaff) return go('staff'); return renderRegister(); }
     S.home = r.home;
     if (r.needConsent) return renderConsentAgain();
-    go(location.hash==='#staff' && r.staff ? 'staff' : 'home');
+    go(wantStaff ? 'staff' : 'home');
   });
 }
 
