@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Paw アプリ</title>
+<script>
+/* 設定：オーナーが入れる2つ（手順書の4）。ここ以外は触らない */
+window.PAW = {
+  liffId: '',   // LINE Developers の LIFF ID（例 2001234567-AbCdEfGh）
+  api: ''       // Apps Script をウェブアプリとして公開したURL（https://script.google.com/macros/s/…/exec）
+};
+</script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+/* 2026-10-22 第1版（土台）。見た目はモック第4版、色は御経塚のLINEリッチメニュー（テラコッタ・クリーム） */
+:root{
+  --bg:#fffae8; --paper:#ffffff; --fg:#2e2e2e; --mute:#6e6864; --line:#e8dec8; --soft:#fff3ea;
+  --acc:#be6d55; --acc2:#efd3c7; --accbg:#f8e8df;
+  --ok:#2e8b57; --okbg:#e6f5ec; --warn:#9a6200; --warnbg:#fff4d6; --bad:#c62828; --badbg:#fde8e6;
+  --font:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;line-break:strict}
+body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.app{max-width:520px;margin:0 auto;min-height:100vh;background:var(--paper);display:flex;flex-direction:column}
+.top{position:sticky;top:0;z-index:5;padding:10px 14px;background:linear-gradient(180deg,var(--accbg),var(--paper));display:flex;align-items:center;gap:8px}
+.brand{font-weight:700;letter-spacing:.06em;color:var(--acc);font-size:1.1rem}
+.mode{font-size:.72rem;padding:3px 10px;border-radius:999px;background:var(--acc);color:#fff;white-space:nowrap}
+.who{font-size:.8rem;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ham{margin-left:auto;width:42px;height:38px;border:0;border-radius:10px;background:var(--paper);cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;flex:none;box-shadow:0 1px 3px rgba(110,70,50,.18)}
+.ham span{display:block;width:18px;height:2px;background:var(--acc);border-radius:2px}
+.ham[aria-expanded="true"]{background:var(--acc)} .ham[aria-expanded="true"] span{background:#fff}
+.menu{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));max-width:496px;margin:0 auto;z-index:20;background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 30px -14px rgba(110,70,50,.5);padding:6px;display:flex;flex-direction:column}
+.menu button{font:inherit;font-size:1rem;text-align:left;padding:12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer;display:flex;align-items:center;gap:12px;border-radius:10px}
+.menu button:last-child{border-bottom:0}
+.menu .ic{width:30px;height:30px;border-radius:50%;background:var(--accbg);color:var(--acc);display:flex;align-items:center;justify-content:center;flex:none}
+.menu button[aria-current="page"]{background:var(--accbg);color:var(--acc);font-weight:700}
+main{flex:1;padding:12px 14px 28px;display:flex;flex-direction:column;gap:10px}
+.card{border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:var(--paper)}
+.card.acc{background:var(--accbg);border-color:transparent;text-align:center;padding:16px 14px}
+.card.soft{background:var(--soft);border-color:transparent}
+.card h3{margin:0 0 8px;font-size:.92rem;color:var(--mute);font-weight:600;letter-spacing:.04em}
+.card p{margin:0}
+.small{font-size:.8rem;color:var(--mute)}
+.huge{font-size:2.1rem;font-weight:700;line-height:1.15;color:var(--acc);font-variant-numeric:tabular-nums}
+.huge small{font-size:1rem;color:var(--fg);font-weight:600}
+.one{font-size:.95rem;margin-top:6px}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.quick button{font:inherit;border:0;border-radius:14px;padding:12px 4px 10px;background:var(--soft);color:var(--fg);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:.8rem;font-weight:600}
+.quick .ic{width:44px;height:44px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center}
+.quick .ok .ic{background:var(--ok)}
+.svg{width:1.15em;height:1.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
+.quick .svg{width:1.35em;height:1.35em}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{font:inherit;font-size:.92rem;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--paper);color:var(--fg);cursor:pointer}
+.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:700}
+.btn.wide{width:100%}
+.btn.sm{font-size:.8rem;padding:6px 10px;border-radius:9px}
+.btn:disabled{opacity:.5}
+.tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--mute);white-space:nowrap}
+.tag.ok{background:var(--okbg);color:var(--ok)} .tag.warn{background:var(--warnbg);color:var(--warn)} .tag.bad{background:var(--badbg);color:var(--bad)} .tag.acc{background:var(--accbg);color:var(--acc)}
+.list{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--paper);color:var(--fg);text-decoration:none}
+.item .th{width:46px;height:46px;border-radius:12px;background:var(--acc2);flex:none;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:700}
+.item b{display:block;font-size:.92rem;font-weight:600}
+.item .s{font-size:.76rem;color:var(--mute)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:.8rem;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--fg);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--acc);color:#fff;border-color:var(--acc)}
+.q{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+.q:last-child{border-bottom:0}
+.ans{display:flex;gap:4px;flex:none}
+.ans button{font:inherit;font-size:.8rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--paper);color:var(--fg);cursor:pointer}
+.ans button[aria-pressed="true"]{background:var(--fg);color:var(--paper)}
+.q.red .ans button[data-v="1"][aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+.res{border-radius:16px;padding:14px;text-align:center}
+.res.green{background:var(--okbg);color:var(--ok)} .res.yel{background:var(--warnbg);color:var(--warn)} .res.red{background:var(--badbg);color:var(--bad)}
+.res b{display:block;font-size:1.4rem;margin-bottom:2px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;font-size:.74rem;text-align:center}
+.cal .d{padding:7px 0;border-radius:8px;background:var(--soft);color:var(--mute)}
+.cal .d.y{background:var(--acc2);color:var(--fg);font-weight:700}
+.cal .d.t{outline:2px solid var(--acc)}
+.todo{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.92rem}
+.todo:last-of-type{border-bottom:0}
+.todo input{width:20px;height:20px;accent-color:var(--acc);flex:none}
+.todo .by{margin-left:auto;font-size:.72rem;color:var(--mute);white-space:nowrap}
+.post{border:1px solid var(--line);border-radius:14px;padding:10px 12px;font-size:.92rem;background:var(--paper)}
+.post.mine{background:var(--soft);border-color:var(--acc2)}
+.post .h{display:flex;gap:8px;align-items:center;font-size:.76rem;color:var(--mute);margin-bottom:4px;flex-wrap:wrap}
+.post .h b{color:var(--fg)}
+.av{width:26px;height:26px;border-radius:50%;background:var(--acc2);display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--fg);flex:none}
+.av.st{background:var(--acc);color:#fff}
+.post .f{display:flex;gap:14px;margin-top:6px;font-size:.78rem}
+.post .f button{font:inherit;font-size:.78rem;border:0;background:transparent;color:var(--mute);padding:2px 0;cursor:pointer}
+.post .f button[aria-pressed="true"]{color:var(--acc);font-weight:700}
+.cm{margin-top:8px;padding-left:10px;border-left:2px solid var(--acc2);display:flex;flex-direction:column;gap:6px;font-size:.86rem}
+.cm .h{margin:0}
+.cm-in{display:flex;gap:6px;margin-top:8px}
+.cm-in input{padding:6px 10px;font-size:.86rem}
+.cm-in .btn{flex:none;white-space:nowrap}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.seg button{font:inherit;font-size:.86rem;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--paper);color:var(--fg);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:700}
+.plan{display:flex;flex-direction:column}
+.st{display:flex;gap:10px;align-items:baseline;padding:8px 6px;border-bottom:1px solid var(--line);font-size:.9rem}
+.st:last-child{border-bottom:0}
+.st .when{width:92px;flex:none;font-weight:700;font-size:.78rem;color:var(--mute);white-space:nowrap}
+.st.now{background:var(--accbg);border-radius:10px;border-bottom-color:transparent}
+.st.now .when{color:var(--acc)}
+.st.done{opacity:.55}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.86rem;color:var(--mute)}
+textarea,input[type=text],input[type=date],input[type=month],input[type=datetime-local],input[type=number],select{font:inherit;font-size:16px;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--fg)}
+textarea{min-height:76px;resize:vertical}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:.9rem;padding:6px 0}
+.check input{width:22px;height:22px;accent-color:var(--acc);flex:none;margin-top:1px}
+.switch{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:.92rem;gap:10px}
+.switch:last-child{border-bottom:0}
+.switch input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
+.consent{font-size:.84rem;background:var(--soft);border-radius:12px;padding:10px 12px;max-height:220px;overflow:auto}
+.consent ol{margin:6px 0 0;padding-left:1.2em}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:.88rem;z-index:30;max-width:90vw}
+.err{background:var(--badbg);color:var(--bad);border-radius:12px;padding:10px 12px;font-size:.88rem}
+.center{text-align:center}
+table{border-collapse:collapse;width:100%;font-size:.84rem}
+th,td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:.76rem;white-space:nowrap}
+td .btn,td .small{white-space:nowrap}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10h-6v-6H9v6H3z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="m13 7 4 4"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+<symbol id="i-bar" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></symbol>
+</svg>
+<div class="app">
+  <div class="top"><span class="brand">Paw</span><span class="mode" id="modeTag" hidden></span><span class="who" id="who"></span>
+    <button type="button" class="ham" id="ham" aria-label="メニュー" aria-expanded="false" hidden><span></span><span></span><span></span></button></div>
+  <div class="menu" id="menu" hidden></div>
+  <main id="main"><div class="card center small">読み込んでいます…</div></main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+'use strict';
+var S = { token:'', me:null, home:null, screen:'home', notes:null, slots:null, contents:null, staff:null, filter:{} };
+var STAGE = { pre:'妊活中', mat:'妊娠中', post:'産後', online:'オンライン' };
+var CHECK = [
+  { key:'bleed', label:'出血', red:1, skipPre:1 }, { key:'pain', label:'お腹の張り・痛み', red:1, skipPre:1 },
+  { key:'dizzy', label:'めまい・息切れ', red:1 }, { key:'fever', label:'熱（37.5度以上）', red:1 },
+  { key:'stop', label:'先生に「運動は控えて」と言われた', red:1 },
+  { key:'sleep', label:'睡眠 4時間未満' }, { key:'eat', label:'食事がほとんど取れない' },
+  { key:'back', label:'腰・骨盤の強い痛み' }, { key:'mood', label:'気分がひどく落ち込む' }, { key:'want', label:'動きたい気持ちがない' }
+];
+// 産後半年の計画（運動の目安。布村さん確認前の仮案 2026-10-22）
+var POST_PLAN = [
+  ['産後0〜1か月','休む・深い呼吸だけ'], ['産後1〜2か月','健診で先生のOK→骨盤底と呼吸'], ['産後2〜3か月','お腹まわりをやさしく'],
+  ['産後3〜4か月','抱っこに負けない姿勢'], ['産後4〜5か月','店のパーソナルで全身を少しずつ'], ['産後5〜6か月','いつものピラティスへ戻る準備']
+];
+var $ = function(id){ return document.getElementById(id); };
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function ic(n){ return '<svg class="svg"><use href="#i-'+n+'"/></svg>'; }
+function toast(t){ var e=$('toast'); e.textContent=t; e.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(function(){e.hidden=true;},2600); }
+function md(iso){ if(!iso) return ''; var d=new Date(iso); return (d.getMonth()+1)+'/'+d.getDate(); }
+function wd(iso){ var d=new Date(iso); return '日月火水木金土'.charAt(d.getDay()); }
+function hm(iso){ var d=new Date(iso); return d.getHours()+':'+('0'+d.getMinutes()).slice(-2); }
+function today(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+
+/* ---------- 通信 ---------- */
+function api(a, body){
+  var payload = Object.assign({ a:a, t:S.token }, body||{});
+  return fetch(PAW.api, { method:'POST', body: JSON.stringify(payload) }).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.relogin && window.liff && liff.isInClient && !TEST) { liff.login(); }
+    return res;
+  }).catch(function(){ return { ok:false, error:'つながりませんでした。電波の良いところでもう一度お試しください' }; });
+}
+// 手元の試験（localhost）のときだけ、URLの ?t= を本人確認の代わりに使う。本番ではLINEが確かめる
+var TEST = /^http:\/\/localhost/.test(PAW.api) && /[?&]t=/.test(location.search);
+
+function start(){
+  if (!PAW.api) { $('main').innerHTML='<div class="err">設定が入っていません（手順書の4）。</div>'; return; }
+  if (TEST) { S.token = decodeURIComponent(location.search.match(/[?&]t=([^&]+)/)[1]); return boot(); }
+  if (!window.liff || !PAW.liffId) { $('main').innerHTML='<div class="err">LINEの中で開いてください。</div>'; return; }
+  liff.init({ liffId: PAW.liffId }).then(function(){
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+    S.token = liff.getIDToken();
+    boot();
+  }).catch(function(){ $('main').innerHTML='<div class="err">LINEとつながりませんでした。開き直してください。</div>'; });
+}
+
+function boot(){
+  api('me').then(function(r){
+    if (!r.ok) { $('main').innerHTML='<div class="err">'+esc(r.error)+'</div>'; return; }
+    S.me = r;
+    if (!r.registered) { if (location.hash==='#staff' && r.staff) return go('staff'); return renderRegister(); }
+    S.home = r.home;
+    if (r.needConsent) return renderConsentAgain();
+    go(location.hash==='#staff' && r.staff ? 'staff' : 'home');
+  });
+}
+
+/* ---------- 枠 ---------- */
+function frame(){
+  var h = S.home;
+  $('ham').hidden = false;
+  $('modeTag').hidden = !h; if (h) $('modeTag').textContent = h.stageLabel;
+  $('who').textContent = h ? h.nick+'さん' : (S.me && S.me.staff ? 'スタッフ' : '');
+  var items = h ? [['home','home','ホーム'],['find','search','さがす'],['log','bar','記録'],['note','heart','つながるノート'],['reserve','cal','予約'],['memo','edit','メモ・設定']] : [];
+  if (S.me && S.me.staff) items.push(['staff','user','スタッフ画面']);
+  $('menu').innerHTML = items.map(function(i){ return '<button type="button" data-go="'+i[0]+'"'+(S.screen===i[0]?' aria-current="page"':'')+'><span class="ic">'+ic(i[1])+'</span>'+i[2]+'</button>'; }).join('');
+}
+function go(s){
+  S.screen = s; menu(false); frame(); window.scrollTo(0,0);
+  ({ home:renderHome, check:renderCheck, find:renderFind, log:renderLog, note:renderNote, reserve:renderReserve, memo:renderMemo, staff:renderStaff })[s]();
+}
+function menu(open){ $('menu').hidden=!open; $('ham').setAttribute('aria-expanded', open?'true':'false'); }
+
+/* ---------- 登録 ---------- */
+var CONSENT = '<b>Paw アプリ 利用の同意（'+'2026-11 第1版【案・10/24に確定】'+'）</b><ol>'+
+  '<li>このアプリは、運動を続けるためのものです。診断や治療はしません。体のことは主治医に相談してください。</li>'+
+  '<li>妊娠中・産後の方は、主治医から運動の許可を受けていることが条件です。</li>'+
+  '<li>体調チェックで「お休み」が出たら、運動をやめてください。担当スタッフにも知らせが届きます。</li>'+
+  '<li>預かる情報：お名前・ニックネーム・時期（予定日・出産日）・体調チェックの答え・運動の記録・メモ。使うのは、あなたへのサポートと試行のふり返りだけです。</li>'+
+  '<li>見る人：富山店の担当スタッフと本部だけ。見た記録が残ります。つながるノートでは、ニックネームと時期だけが表示されます。</li>'+
+  '<li>やめるときは、スタッフに伝えると情報を消します。</li></ol>';
+function renderRegister(){
+  S.screen='register'; $('ham').hidden=true; $('who').textContent='';
+  $('main').innerHTML =
+   '<div class="card acc"><div class="huge" style="font-size:1.4rem">はじめまして</div><div class="one">1分で登録できます</div></div>'+
+   '<div class="card"><div class="list">'+
+   '<label class="f">お名前（スタッフだけが見ます）<input type="text" id="r-name" autocomplete="name"></label>'+
+   '<label class="f">ニックネーム（ノートに表示）<input type="text" id="r-nick" maxlength="20"></label>'+
+   '<label class="f">店舗<select id="r-store">'+Object.keys(S.me.stores).map(function(k){return '<option value="'+k+'">'+esc(S.me.stores[k])+'</option>';}).join('')+'</select></label>'+
+   '<div class="f small">いまの時期</div><div class="chips" id="r-stage">'+Object.keys(STAGE).map(function(k,i){return '<button type="button" class="chip" data-stage="'+k+'" aria-pressed="'+(k==='mat')+'">'+STAGE[k]+'</button>';}).join('')+'</div>'+
+   '<label class="f" id="w-pre" hidden>妊活を始めた月<input type="month" id="r-pre"></label>'+
+   '<label class="f" id="w-edd">出産予定日<input type="date" id="r-edd"></label>'+
+   '<label class="f" id="w-birth" hidden>出産日<input type="date" id="r-birth" max="'+today()+'"></label>'+
+   '<label class="check" id="w-permit"><input type="checkbox" id="r-permit"><span>主治医から運動の許可を受けています</span></label>'+
+   '</div></div>'+
+   '<div class="card"><h3>同意書</h3><div class="consent">'+CONSENT+'</div><label class="check" style="margin-top:8px"><input type="checkbox" id="r-consent"><span>読んで同意します</span></label></div>'+
+   '<div id="r-err"></div><button type="button" class="btn pri wide" id="r-go">登録する</button>';
+  var stage='mat';
+  function show(){ $('w-pre').hidden=stage!=='pre'; $('w-edd').hidden=stage!=='mat'; $('w-birth').hidden=stage!=='post'; $('w-permit').hidden=!(stage==='mat'||stage==='post'); }
+  $('r-stage').onclick=function(e){ var b=e.target.closest('[data-stage]'); if(!b) return; stage=b.dataset.stage; this.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',c===b);}); show(); };
+  $('r-go').onclick=function(){
+    var btn=this; btn.disabled=true;
+    api('register',{ name:$('r-name').value, nick:$('r-nick').value, store:$('r-store').value, stage:stage, edd:$('r-edd').value, birth:$('r-birth').value,
+      preStart:$('r-pre').value?$('r-pre').value+'-01':'', permit:$('r-permit').checked, consent:$('r-consent').checked }).then(function(r){
+      btn.disabled=false;
+      if(!r.ok){ $('r-err').innerHTML='<div class="err">'+esc(r.error)+'</div>'; return; }
+      S.home=r.home; S.me.registered=true; toast('登録しました'); go('home');
+    });
+  };
+  show();
+}
+function renderConsentAgain(){
+  $('main').innerHTML='<div class="card"><h3>同意書が新しくなりました</h3><div class="consent">'+CONSENT+'</div><label class="check" style="margin-top:8px"><input type="checkbox" id="c-ok"><span>読んで同意します</span></label></div><button type="button" class="btn pri wide" id="c-go">続ける</button>';
+  $('c-go').onclick=function(){ if(!$('c-ok').checked) return toast('同意にチェックを入れてください'); api('consent').then(function(){ go('home'); }); };
+}
+
+/* ---------- ホーム ---------- */
+function renderHome(){
+  var h=S.home, top='';
+  if (h.stage==='pre') top='<div class="small">妊活中'+(h.preMonth?' ・ '+h.preMonth+'か月目':'')+'</div><div class="huge">体を整える<small>時期</small></div><div class="one">骨盤まわり・血流・睡眠のリズム</div>';
+  if (h.stage==='mat') top='<div class="small">予定日まで あと'+h.daysLeft+'日</div><div class="huge">'+h.week+'<small>週</small> '+h.day+'<small>日</small></div>';
+  if (h.stage==='post') top='<div class="small">出産日 '+md(h.birth)+'</div><div class="huge">産後 '+h.months+'<small>か月</small> '+h.daysInMonth+'<small>日</small></div><div class="one">呼吸と骨盤底から、ゆっくり</div>';
+  if (h.stage==='online') top='<div class="small">今週の運動</div><div class="huge">'+h.record.week+'<small>回</small> <span style="color:var(--mute);font-size:1rem">／'+h.goal+'回</span></div><div class="one">'+(h.record.week>=h.goal?'今週の目標を達成しました':'あと'+(h.goal-h.record.week)+'回で目標です')+'</div>'+
+    '<div class="row" style="justify-content:center;margin-top:10px"><span class="small">1週間の目標</span><button class="btn sm" type="button" data-goal="-1" aria-label="目標を1回減らす">-</button><b style="min-width:3em">'+h.goal+'回</b><button class="btn sm" type="button" data-goal="1" aria-label="目標を1回増やす">+</button></div>';
+  var html='<div class="card acc">'+top+'</div>';
+  if (h.stage==='pre') html+='<div class="card center" style="border-color:var(--acc)"><div class="one" style="margin:0 0 8px;font-weight:700">妊娠がわかったら</div><button class="btn pri wide" type="button" data-go="memo">出産予定日を入れる</button></div>';
+  if (h.stage==='post' && h.months<6){
+    html+='<div class="card"><h3>産後半年の計画</h3><div class="plan">'+POST_PLAN.map(function(p,i){ return '<div class="st'+(i<h.months?' done':i===h.months?' now':'')+'"><span class="when">'+p[0]+'</span><span>'+p[1]+(i===h.months?' <span class="tag acc">いまここ</span>':'')+'</span></div>'; }).join('')+'</div><div class="small" style="margin-top:6px">運動の目安です。体のことは健診で先生に確認してください</div></div>';
+  }
+  if (h.word) html+='<div class="card soft"><h3>今日の一言</h3><p>'+esc(h.word)+'</p></div>';
+  if ((h.stage==='mat'||h.stage==='post') && !h.permit) html+='<div class="err">主治医の運動の許可がまだ確認できていません。許可を受けたら、メモ・設定から入れてください。</div>';
+  html+='<div class="quick">'+(h.stage!=='online'?'<button type="button" class="ok" data-go="check"><span class="ic">'+ic('check')+'</span>今日の体調</button>':'<button type="button" data-go="log"><span class="ic">'+ic('bar')+'</span>記録する</button>')+
+    '<button type="button" data-go="find"><span class="ic">'+ic('search')+'</span>さがす</button><button type="button" data-go="reserve"><span class="ic">'+ic('cal')+'</span>予約</button></div>';
+  html+='<div class="card"><h3>次の予約</h3>'+(h.next?'<div class="row"><b>'+md(h.next.start)+'（'+wd(h.next.start)+'）'+hm(h.next.start)+' '+esc(h.next.kind)+'</b><button class="btn sm" type="button" data-go="reserve" style="margin-left:auto">変更</button></div>':'<div class="row"><span class="small">まだありません</span><button class="btn sm" type="button" data-go="reserve" style="margin-left:auto">予約する</button></div>')+'</div>';
+  html+='<div class="card"><h3>やること</h3><div id="todos">'+todosHtml(h.todos)+'</div><div class="cm-in"><input type="text" id="todo-new" placeholder="やることを足す"><button class="btn sm" type="button" id="todo-add">足す</button></div></div>';
+  $('main').innerHTML=html;
+  $('todo-add').onclick=function(){ var v=$('todo-new').value; if(!v) return; api('todoAdd',{text:v}).then(function(r){ if(!r.ok) return toast(r.error); h.todos.push(r.todo); $('todos').innerHTML=todosHtml(h.todos); $('todo-new').value=''; }); };
+}
+function todosHtml(t){ return t.length? t.map(function(x){ return '<label class="todo"><input type="checkbox" data-todo="'+esc(x.id)+'"'+(x.done?' checked':'')+'><span>'+esc(x.text)+'</span><span class="by">'+esc(x.by)+'</span></label>'; }).join('') : '<div class="small">今はありません</div>'; }
+
+/* ---------- 体調チェック ---------- */
+function renderCheck(){
+  var pre=S.home.stage==='pre', items=CHECK.filter(function(c){ return !(pre&&c.skipPre); }), ans={};
+  $('main').innerHTML='<div class="card acc"><div class="huge" style="font-size:1.3rem">今日、動いていい？</div><div class="small">'+items.length+'問・1分</div></div>'+
+   '<div class="card" id="qs">'+items.map(function(c){ return '<div class="q'+(c.red?' red':'')+'"><span>'+c.label+'</span><span class="ans" data-k="'+c.key+'"><button type="button" data-v="0" aria-pressed="true">いいえ</button><button type="button" data-v="1" aria-pressed="false">はい</button></span></div>'; }).join('')+'</div>'+
+   '<div id="res"></div><button class="btn pri wide" type="button" id="ck-go">記録する</button><p class="small center">診断ではありません。上の5問のどれかが「はい」なら運動はお休みし、主治医に相談してください。</p>';
+  $('qs').onclick=function(e){ var b=e.target.closest('.ans button'); if(!b) return; var g=b.parentNode; g.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b);}); ans[g.dataset.k]=b.dataset.v==='1'; };
+  $('ck-go').onclick=function(){
+    var btn=this; btn.disabled=true;
+    api('check',{answers:ans}).then(function(r){
+      if(!r.ok){ btn.disabled=false; return toast(r.error); }
+      var t = r.result==='red'?['今日はお休み','先生に相談してください。スタッフにも届きます']: r.result==='yel'?['今日は軽めに','呼吸とストレッチ10分まで']:['いつもどおり','水分をとって、違和感があれば止めましょう'];
+      $('res').innerHTML='<div class="res '+r.result+'"><b>'+t[0]+'</b><span>'+t[1]+'</span></div>';
+      btn.textContent='ホームへ'; btn.disabled=false; btn.onclick=function(){ refresh(); };
+    });
+  };
+}
+
+/* ---------- さがす ---------- */
+function renderFind(){
+  var main=$('main'); main.innerHTML='<div class="card center small">読み込んでいます…</div>';
+  api('contents').then(function(r){
+    if(!r.ok) return main.innerHTML='<div class="err">'+esc(r.error)+'</div>';
+    var list=r.list, f=S.filter, periods=uniq(list.map(function(c){return c.period;})), concerns=uniq(list.map(function(c){return c.concern;}));
+    function draw(){
+      var shown=list.filter(function(c){ return (!f.period||c.period===f.period)&&(!f.concern||c.concern===f.concern); });
+      main.innerHTML='<div class="card"><h3>'+(S.home.stage==='online'?'部位':'時期')+'</h3><div class="chips" data-f="'+(S.home.stage==='online'?'concern':'period')+'">'+chips(S.home.stage==='online'?concerns:periods, S.home.stage==='online'?f.concern:f.period)+'</div>'+
+        (S.home.stage!=='online'?'<h3 style="margin-top:10px">お悩み</h3><div class="chips" data-f="concern">'+chips(concerns,f.concern)+'</div>':'')+'</div>'+
+        '<div class="list">'+(shown.length?shown.map(function(c){ return '<a class="item" href="'+esc(c.url)+'" target="_blank" rel="noopener" data-watch="'+esc(c.id)+'"><div class="th">'+esc(c.min)+'分</div><div><b>'+esc(c.title)+'</b><span class="s">'+esc(c.kind)+' ・ '+esc(c.level||'')+'</span></div></a>'; }).join(''):'<div class="card small center">まだありません。布村さんが確認した動画から順に増えます</div>')+'</div>';
+    }
+    function chips(arr,cur){ return '<button class="chip" type="button" data-v="" aria-pressed="'+(!cur)+'">すべて</button>'+arr.map(function(v){ return '<button class="chip" type="button" data-v="'+esc(v)+'" aria-pressed="'+(cur===v)+'">'+esc(v)+'</button>'; }).join(''); }
+    main.onclick=function(e){ var c=e.target.closest('.chip'); if(!c) return; f[c.parentNode.dataset.f]=c.dataset.v; draw(); };
+    draw();
+  });
+}
+function uniq(a){ var o=[]; a.forEach(function(v){ if(v&&o.indexOf(v)<0) o.push(v); }); return o; }
+
+/* ---------- 記録 ---------- */
+function renderLog(){
+  var rc=S.home.record, now=new Date(), y=now.getFullYear(), m=now.getMonth(), first=(new Date(y,m,1).getDay()+6)%7, days=new Date(y,m+1,0).getDate();
+  var cal='月火水木金土日'.split('').map(function(d){return '<div class="d">'+d+'</div>';}).join('');
+  for(var i=0;i<first;i++) cal+='<div class="d"></div>';
+  for(var d=1;d<=days;d++) cal+='<div class="d'+(rc.monthDays.indexOf(d)>=0?' y':'')+(d===now.getDate()?' t':'')+'">'+d+'</div>';
+  var lab={red:['bad','お休み'],yel:['warn','軽め'],green:['ok','通常']};
+  $('main').innerHTML='<div class="card acc"><div class="small">続いている日数</div><div class="huge">'+rc.streak+'<small>日</small></div><div class="one">今月 '+rc.monthCount+'回</div></div>'+
+    '<div class="card"><h3>'+(m+1)+'月</h3><div class="cal">'+cal+'</div></div>'+
+    '<div class="card"><h3>今日の運動</h3><div class="row"><select id="lg-min" style="max-width:110px">'+[10,20,30,40,50,60].map(function(v){return '<option value="'+v+'">'+v+'分</option>';}).join('')+'</select><input type="text" id="lg-memo" placeholder="一言（例：腰が楽）" style="flex:1;min-width:0"></div><button class="btn pri wide" type="button" id="lg-go" style="margin-top:8px">記録する</button></div>'+
+    (S.home.stage!=='online'&&rc.checks.length?'<div class="card"><h3>体調</h3><div class="row">'+rc.checks.map(function(c){ var l=lab[c.result]||lab.green; return '<span class="tag '+l[0]+'">'+md(c.at)+' '+l[1]+'</span>'; }).join('')+'</div></div>':'');
+  $('lg-go').onclick=function(){ var b=this; b.disabled=true; api('log',{min:$('lg-min').value,memo:$('lg-memo').value}).then(function(r){ b.disabled=false; if(!r.ok) return toast(r.error); S.home.record=r.record; toast('記録しました'); renderLog(); }); };
+}
+
+/* ---------- つながるノート ---------- */
+function renderNote(){
+  var main=$('main'), vis='all';
+  main.innerHTML='<div class="card center small">読み込んでいます…</div>';
+  api('notes').then(function(r){
+    if(!r.ok) return main.innerHTML='<div class="err">'+esc(r.error)+'</div>';
+    main.innerHTML='<div class="card acc"><div class="huge" style="font-size:1.4rem">つながるノート</div><div class="one">Pawの仲間みんなで見られる場所</div></div>'+
+      '<div class="card"><textarea id="nt-text" placeholder="ここに書く（ニックネームで表示）" maxlength="500"></textarea><div class="small" style="margin:8px 0 4px">見せる相手</div>'+
+      '<div class="seg" id="nt-vis"><button type="button" data-vis="all" aria-pressed="true">全員に公開</button><button type="button" data-vis="staff" aria-pressed="false">スタッフだけ</button></div>'+
+      '<div class="small" id="nt-note" style="margin-top:6px">Pawの会員みんなが見られます。スタッフの確認後に表示</div><button class="btn pri wide" type="button" id="nt-go" style="margin-top:8px">投稿</button></div>'+
+      '<div class="list" id="posts">'+r.posts.map(postHtml).join('')+'</div><p class="small center">体のことは店か先生へ。困った投稿は「通報」でスタッフに知らせてください。</p>';
+    $('nt-vis').onclick=function(e){ var b=e.target.closest('[data-vis]'); if(!b) return; vis=b.dataset.vis; this.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b);}); $('nt-note').textContent= vis==='all'?'Pawの会員みんなが見られます。スタッフの確認後に表示':'あなたとスタッフだけが見られます。ほかの会員には出ません'; };
+    $('nt-go').onclick=function(){ var t=$('nt-text').value; if(!t.trim()) return; var b=this; b.disabled=true; api('post',{text:t,vis:vis}).then(function(r){ b.disabled=false; if(!r.ok) return toast(r.error); toast(r.state==='確認待ち'?'スタッフが確認してから表示されます':'スタッフに届きました'); renderNote(); }); };
+  });
+}
+function postHtml(p){
+  var av='<span class="av'+(p.staff?' st':'')+'">'+esc(p.staff?'P':String(p.nick).charAt(0))+'</span>';
+  var meta=[p.label,p.store].filter(Boolean).join('・');
+  var badge = p.vis==='staff'?'<span class="tag acc">スタッフだけ</span>': p.state==='確認待ち'?'<span class="tag warn">確認待ち（あなたにだけ表示）</span>':'';
+  return '<div class="post'+(p.mine?' mine':'')+'"><div class="h">'+av+'<b>'+esc(p.nick)+(p.mine?'（あなた）':'')+'</b><span>'+esc(meta)+'</span>'+badge+'</div>'+esc(p.text)+
+    (p.vis==='all'&&p.state==='表示'?'<div class="f"><button type="button" data-like="'+p.id+'" aria-pressed="'+p.liked+'">いいね '+p.likes+'</button>'+(!p.mine&&!p.staff?'<button type="button" data-report="'+p.id+'">通報</button>':'')+'</div>':'')+
+    (p.comments.length?'<div class="cm">'+p.comments.map(function(c){ return '<div><div class="h"><span class="av'+(c.staff?' st':'')+'">'+esc(c.staff?'P':String(c.nick).charAt(0))+'</span><b>'+esc(c.nick)+'</b>'+(c.state==='確認待ち'?'<span class="tag warn">確認待ち</span>':'')+'</div>'+esc(c.text)+'</div>'; }).join('')+'</div>':'')+
+    (p.state==='表示'?'<div class="cm-in"><input type="text" placeholder="コメントする" data-cin="'+p.id+'" maxlength="300"><button class="btn sm" type="button" data-csend="'+p.id+'">送る</button></div>':'')+'</div>';
+}
+
+/* ---------- 予約 ---------- */
+function renderReserve(){
+  var main=$('main'); main.innerHTML='<div class="card center small">読み込んでいます…</div>';
+  api('slots').then(function(r){
+    if(!r.ok) return main.innerHTML='<div class="err">'+esc(r.error)+'</div>';
+    main.innerHTML='<div class="card acc"><div class="huge" style="font-size:1.4rem">予約</div><div class="one">'+esc(S.home.store)+'</div></div>'+
+      '<div class="list">'+(r.list.length?r.list.map(function(s){ return '<div class="item"><div class="th">'+md(s.start)+'<br>'+wd(s.start)+'</div><div style="flex:1;min-width:0"><b>'+hm(s.start)+'〜'+hm(s.end)+' '+esc(s.kind)+'</b><span class="s">担当 '+esc(s.staff)+' ・ '+(s.bookingId?'予約済み':'残り'+s.left)+'</span></div>'+
+        (s.bookingId?'<button class="btn sm" type="button" data-cancel="'+s.bookingId+'">取り消す</button>':s.left>0?'<button class="btn sm pri" type="button" data-book="'+s.id+'">予約する</button>':'<span class="tag">満席</span>')+'</div>'; }).join(''):'<div class="card small center">いま予約できる枠はありません。店にお問い合わせください</div>')+'</div>'+
+      '<p class="small center">お支払いは、これまでどおり店頭で。体調チェックで「お休み」の日は、取り消してください。</p>';
+  });
+}
+
+/* ---------- メモ・設定 ---------- */
+function renderMemo(){
+  var h=S.home, sw='';
+  if (h.stage==='pre') sw='<label class="f">出産予定日<input type="date" id="st-edd"></label><label class="check"><input type="checkbox" id="st-permit"><span>主治医から運動の許可を受けています</span></label><button class="btn pri wide" type="button" data-stage-to="mat">妊娠中に切り替える</button>';
+  if (h.stage==='mat') sw='<div class="switch"><span>出産予定日</span><b>'+md(h.edd)+'</b></div><label class="f">出産日<input type="date" id="st-birth" max="'+today()+'"></label><label class="check"><input type="checkbox" id="st-permit"><span>産後の運動について、先生のOKを受けています</span></label><button class="btn pri wide" type="button" data-stage-to="post">産後に切り替える</button>';
+  if (h.stage==='post') sw='<div class="switch"><span>出産日</span><b>'+md(h.birth)+'</b></div><button class="btn wide" type="button" data-stage-to="online">オンラインに切り替える</button>';
+  if (h.stage==='online') sw='<label class="switch"><span>1週間の運動目標</span><select id="st-goal" style="max-width:110px">'+[1,2,3,4,5,6,7].map(function(n){return '<option value="'+n+'"'+(n===h.goal?' selected':'')+'>'+n+'回</option>';}).join('')+'</select></label>';
+  $('main').innerHTML='<div class="card"><h3>相談メモ</h3><textarea id="mm-text" placeholder="健診で聞きたいこと、スタッフに相談したいこと">'+esc(h.memo.text)+'</textarea><label class="check"><input type="checkbox" id="mm-share"'+(h.memo.share?' checked':'')+'><span>担当スタッフに見せる</span></label><button class="btn pri" type="button" id="mm-go">保存</button></div>'+
+    '<div class="card"><h3>時期</h3><div class="list">'+sw+'</div></div>'+
+    ((h.stage==='mat'||h.stage==='post')&&!h.permit?'<div class="card"><h3>主治医の運動の許可</h3><label class="check"><input type="checkbox" id="pm-ok"><span>主治医から運動の許可を受けました</span></label><button class="btn" type="button" id="pm-go">保存</button></div>':'')+
+    '<div class="card"><label class="switch"><span>お知らせをしばらく止める</span><input type="checkbox" id="st-mute"'+(h.mute?' checked':'')+'></label><p class="small">理由は聞きません。ご希望があれば担当スタッフからご連絡します。</p></div>';
+  $('mm-go').onclick=function(){ api('memo',{text:$('mm-text').value,share:$('mm-share').checked}).then(function(r){ if(!r.ok) return toast(r.error); h.memo={text:$('mm-text').value,share:$('mm-share').checked}; toast('保存しました'); }); };
+  $('st-mute').onchange=function(){ api('setMute',{on:this.checked}).then(function(){ toast('保存しました'); }); };
+  if ($('st-goal')) $('st-goal').onchange=function(){ setGoal(+this.value); };
+  if ($('pm-go')) $('pm-go').onclick=function(){ if(!$('pm-ok').checked) return; api('setStage',{stage:h.stage,edd:h.edd?h.edd.slice(0,10):'',birth:h.birth?h.birth.slice(0,10):'',permit:true}).then(function(r){ if(!r.ok) return toast(r.error); S.home=r.home; toast('保存しました'); go('home'); }); };
+}
+function setGoal(n){ api('setGoal',{n:n}).then(function(r){ if(!r.ok) return toast(r.error); S.home.goal=r.goal; if(S.screen==='home') renderHome(); else toast('保存しました'); }); }
+
+/* ---------- スタッフ画面 ---------- */
+function renderStaff(){
+  var main=$('main'); main.innerHTML='<div class="card center small">読み込んでいます…</div>';
+  api('staffHome').then(function(r){
+    if(!r.ok) return main.innerHTML='<div class="err">'+esc(r.error)+(r.userId?'<br>あなたのLINEのID：<b style="user-select:all">'+esc(r.userId)+'</b><br>本部が「スタッフ」の表に入れると使えます':'')+'</div>';
+    S.staff=r;
+    var lab={red:'bad',yel:'warn'};
+    main.innerHTML='<div class="card acc"><div class="huge" style="font-size:1.3rem">スタッフ画面</div><div class="one">'+esc(r.me.name)+'（'+esc(r.me.store)+'）</div></div>'+
+     '<div class="card"><h3><span class="tag bad">声かけ</span> この3日の「お休み」「軽め」</h3>'+(r.reds.length?'<table><tr><th>会員</th><th>出た項目</th><th></th></tr>'+r.reds.map(function(c){ return '<tr><td><b>'+esc(c.nick)+'</b><br><span class="small">'+esc(c.label)+' '+md(c.at)+'</span></td><td><span class="tag '+lab[c.result]+'">'+(c.result==='red'?'お休み':'軽め')+'</span> '+esc(c.items.join('・'))+'</td><td><button class="btn sm" type="button" data-handled="'+esc(c.userId)+'">声かけ済み</button></td></tr>'; }).join('')+'</table>':'<div class="small">ありません</div>')+'</div>'+
+     '<div class="card"><h3><span class="tag warn">確認</span> 表示前の投稿・コメント</h3>'+((r.pending.length+r.pendingComments.length)?'<table>'+r.pending.map(function(p){ return '<tr><td><b>'+esc(p.nick)+'</b><br><span class="small">'+esc(p.label)+'</span></td><td>'+esc(p.text)+'</td><td class="row"><button class="btn sm pri" type="button" data-approve="post:'+p.id+':1">表示</button><button class="btn sm" type="button" data-approve="post:'+p.id+':0">出さない</button></td></tr>'; }).join('')+
+       r.pendingComments.map(function(c){ return '<tr><td><b>'+esc(c.nick)+'</b><br><span class="small">コメント</span></td><td>'+esc(c.text)+'</td><td class="row"><button class="btn sm pri" type="button" data-approve="comment:'+c.id+':1">表示</button><button class="btn sm" type="button" data-approve="comment:'+c.id+':0">出さない</button></td></tr>'; }).join('')+'</table>':'<div class="small">ありません</div>')+
+       '<p class="small" style="margin-top:6px">体や病院のことが書かれていたら「出さない」にして、本人にLINEで店か先生への相談を案内してください。</p></div>'+
+     '<div class="card"><h3><span class="tag acc">スタッフだけ</span> 会員からの相談</h3>'+(r.staffOnly.length?'<div class="list">'+r.staffOnly.map(function(p){ return '<div class="post"><div class="h"><b>'+esc(p.nick)+'</b><span>'+esc(p.label)+' '+md(p.at)+'</span></div>'+esc(p.text)+(p.comments.length?'<div class="cm">'+p.comments.map(function(c){return '<div><b>'+esc(c.nick)+'</b> '+esc(c.text)+'</div>';}).join('')+'</div>':'')+'<div class="cm-in"><input type="text" placeholder="返事を書く" data-sin="'+p.id+'"><button class="btn sm" type="button" data-ssend="'+p.id+'">送る</button></div></div>'; }).join('')+'</div>':'<div class="small">ありません</div>')+'</div>'+
+     '<div class="card"><h3>会員</h3><table><tr><th>ニックネーム</th><th>時期</th><th>主治医の許可</th></tr>'+r.members.map(function(m){ return '<tr><td><button class="btn sm" type="button" data-member="'+esc(m.userId)+'">'+esc(m.nick)+'</button></td><td>'+esc(m.label)+'</td><td>'+(m.permit?'<span class="tag ok">あり</span>':'<span class="tag bad">未確認</span>')+'</td></tr>'; }).join('')+'</table><div id="mdetail"></div></div>'+
+     '<div class="card"><h3>予約枠</h3>'+(r.slots.length?'<table><tr><th>日時</th><th>内容</th><th>予約</th><th></th></tr>'+r.slots.map(function(s){ return '<tr><td>'+md(s.start)+'（'+wd(s.start)+'）<br>'+hm(s.start)+'〜'+hm(s.end)+'</td><td>'+esc(s.kind)+'<br><span class="small">'+esc(s.staff)+'</span></td><td>'+s.booked.length+'/'+s.cap+'<br><span class="small">'+esc(s.booked.join('、'))+'</span></td><td><button class="btn sm" type="button" data-close="'+s.id+'">閉じる</button></td></tr>'; }).join('')+'</table>':'<div class="small">ありません</div>')+
+       '<div class="list" style="margin-top:10px"><label class="f">開始<input type="datetime-local" id="sl-start"></label><label class="f">終了<input type="datetime-local" id="sl-end"></label><div class="row"><label class="f" style="flex:1">種類<select id="sl-kind"><option>パーソナル</option><option>グループ</option><option>ライブ</option></select></label><label class="f" style="width:90px">定員<input type="number" id="sl-cap" value="1" min="1"></label></div><label class="f">対象<select id="sl-target"><option value="mat,post">妊娠中・産後</option><option value="pre">妊活中</option><option value="online">オンライン</option><option value="all">全員</option></select></label><button class="btn pri" type="button" id="sl-go">枠を足す</button></div></div>'+
+     '<div class="card"><h3>みんなへのお知らせ（ノートに表示）</h3><textarea id="sp-text" placeholder="例：木曜のライブは妊娠中も産後もOK"></textarea><button class="btn pri" type="button" id="sp-go" style="margin-top:8px">投稿</button></div>';
+    $('sl-go').onclick=function(){ api('slotAdd',{start:$('sl-start').value,end:$('sl-end').value,kind:$('sl-kind').value,cap:$('sl-cap').value,target:$('sl-target').value}).then(function(r){ if(!r.ok) return toast(r.error); toast('枠を足しました'); renderStaff(); }); };
+    $('sp-go').onclick=function(){ api('staffPost',{text:$('sp-text').value}).then(function(r){ if(!r.ok) return toast(r.error); toast('投稿しました'); renderStaff(); }); };
+  });
+}
+function renderMember(uid){
+  api('member',{userId:uid}).then(function(r){
+    var box=$('mdetail'); if(!r.ok) return box.innerHTML='<div class="err">'+esc(r.error)+'</div>';
+    var m=r.member;
+    box.innerHTML='<div class="card soft" style="margin-top:10px"><h3>サポートノート：'+esc(m.nick)+'（'+esc(m.name)+'）</h3>'+
+      '<table><tr><td>時期</td><td>'+esc(m.label)+(m.edd?'（予定日 '+md(m.edd)+'）':'')+(m.birth?'（出産日 '+md(m.birth)+'）':'')+'</td></tr><tr><td>続いた日数</td><td>'+r.record.streak+'日・今月'+r.record.monthCount+'回</td></tr>'+
+      '<tr><td>相談メモ</td><td>'+(r.memo?esc(r.memo):'<span class="small">共有されていません</span>')+'</td></tr><tr><td>見た記録</td><td class="small">'+r.views.map(function(v){return md(v.at)+' '+esc(v.name);}).join('／')+'</td></tr></table>'+
+      '<div class="list" style="margin-top:8px"><label class="check"><input type="checkbox" id="md-permit"'+(m.permit?' checked':'')+'><span>主治医の運動許可を確認した</span></label><label class="f">気をつける点<textarea id="md-care">'+esc(r.support.care)+'</textarea></label><label class="f">前回の一言<textarea id="md-last">'+esc(r.support.last)+'</textarea></label><button class="btn pri" type="button" id="md-go">保存</button>'+
+      '<div class="cm-in"><input type="text" id="md-todo" placeholder="やることを渡す（例：ほぐし10分）"><button class="btn sm" type="button" id="md-todo-go">渡す</button></div></div></div>';
+    $('md-go').onclick=function(){ api('supportSave',{userId:uid,care:$('md-care').value,last:$('md-last').value,permit:$('md-permit').checked}).then(function(r){ toast(r.ok?'保存しました':r.error); }); };
+    $('md-todo-go').onclick=function(){ api('staffTodo',{userId:uid,text:$('md-todo').value}).then(function(r){ toast(r.ok?'渡しました':r.error); if(r.ok) $('md-todo').value=''; }); };
+  });
+}
+
+function refresh(){ api('me').then(function(r){ if(r.ok&&r.home){ S.home=r.home; } go('home'); }); }
+
+/* ---------- 押したときの動き ---------- */
+document.addEventListener('click', function(e){
+  var t=e.target;
+  if (t.closest('#ham')) return menu($('menu').hidden);
+  if (!t.closest('#menu') && !$('menu').hidden) menu(false);
+  var g=t.closest('[data-go]'); if(g) return go(g.dataset.go);
+  var x;
+  if ((x=t.closest('[data-goal]'))) return setGoal(S.home.goal + (+x.dataset.goal));
+  if ((x=t.closest('[data-like]'))) return api('like',{postId:x.dataset.like}).then(function(r){ if(r.ok){ x.textContent='いいね '+r.likes; x.setAttribute('aria-pressed','true'); } });
+  if ((x=t.closest('[data-report]'))) return api('report',{postId:x.dataset.report}).then(function(r){ toast(r.ok?'スタッフに知らせました':r.error); if(r.ok) renderNote(); });
+  if ((x=t.closest('[data-csend]'))) { var inp=document.querySelector('[data-cin="'+x.dataset.csend+'"]'); if(!inp.value) return; return api('comment',{postId:x.dataset.csend,text:inp.value}).then(function(r){ if(!r.ok) return toast(r.error); toast(r.state==='確認待ち'?'スタッフが確認してから表示されます':'送りました'); renderNote(); }); }
+  if ((x=t.closest('[data-book]'))) { x.disabled=true; return api('book',{slotId:x.dataset.book}).then(function(r){ toast(r.ok?'予約しました':r.error); renderReserve(); api('me').then(function(m){ if(m.ok&&m.home) S.home=m.home; }); }); }
+  if ((x=t.closest('[data-cancel]'))) { x.disabled=true; return api('cancel',{bookingId:x.dataset.cancel}).then(function(r){ toast(r.ok?'取り消しました':r.error); renderReserve(); api('me').then(function(m){ if(m.ok&&m.home) S.home=m.home; }); }); }
+  if ((x=t.closest('[data-stage-to]'))) {
+    var to=x.dataset.stageTo, body={stage:to, permit:$('st-permit')?$('st-permit').checked:false};
+    if (to==='mat') body.edd=$('st-edd').value; if (to==='post') body.birth=$('st-birth').value;
+    return api('setStage',body).then(function(r){ if(!r.ok) return toast(r.error); S.home=r.home; toast(STAGE[to]+'に切り替えました'); go('home'); });
+  }
+  if ((x=t.closest('[data-handled]'))) return api('handled',{userId:x.dataset.handled}).then(function(){ renderStaff(); });
+  if ((x=t.closest('[data-approve]'))) { var a=x.dataset.approve.split(':'); return api('approve',{kind:a[0],id:a[1],show:a[2]==='1'}).then(function(){ renderStaff(); }); }
+  if ((x=t.closest('[data-ssend]'))) { var si=document.querySelector('[data-sin="'+x.dataset.ssend+'"]'); if(!si.value) return; return api('staffComment',{postId:x.dataset.ssend,text:si.value}).then(function(r){ toast(r.ok?'返事を送りました':r.error); renderStaff(); }); }
+  if ((x=t.closest('[data-member]'))) return renderMember(x.dataset.member);
+  if ((x=t.closest('[data-close]'))) return api('slotClose',{id:x.dataset.close}).then(function(){ renderStaff(); });
+});
+document.addEventListener('change', function(e){
+  var c=e.target.closest('[data-todo]'); if(!c) return;
+  api('todo',{id:c.dataset.todo,done:c.checked}).then(function(r){ if(!r.ok) toast(r.error); });
+});
+
+start();
+})();
+</script>
+</body>
+</html>
