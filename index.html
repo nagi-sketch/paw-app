@@ -119,6 +119,7 @@ textarea{min-height:76px;resize:vertical}
 .switch{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:.92rem;gap:10px}
 .switch:last-child{border-bottom:0}
 .switch input[type=checkbox]{width:22px;height:22px;accent-color:var(--acc)}
+.prose,.consent{word-break:normal;line-break:strict}
 .consent{font-size:.84rem;background:var(--soft);border-radius:12px;padding:10px 12px;max-height:220px;overflow:auto}
 .consent ol{margin:6px 0 0;padding-left:1.2em}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:.88rem;z-index:30;max-width:90vw}
@@ -233,7 +234,7 @@ var CONSENT = '<b>Paw アプリ 利用の同意（'+'2026-11 第1版【案・10/
   '<li>このアプリは、運動を続けるためのものです。診断や治療はしません。体のことは主治医に相談してください。</li>'+
   '<li>妊娠中・産後の方は、主治医から運動の許可を受けていることが条件です。</li>'+
   '<li>体調チェックで「お休み」が出たら、運動をやめてください。担当スタッフにも知らせが届きます。</li>'+
-  '<li>預かる情報：お名前・ニックネーム・時期（予定日・出産日）・体調チェックの答え・運動の記録・メモ。使うのは、あなたへのサポートと試行のふり返りだけです。</li>'+
+  '<li>預かる情報：お名前・ニックネーム・時期（予定日・出産日、妊活中の方は生理の開始日と周期）・体調チェックの答え・運動の記録・メモ。使うのは、あなたへのサポートと試行のふり返りだけです。</li>'+
   '<li>見る人：富山店の担当スタッフと本部だけ。見た記録が残ります。つながるノートでは、ニックネームと時期だけが表示されます。</li>'+
   '<li>やめるときは、スタッフに伝えると情報を消します。</li></ol>';
 function renderRegister(){
@@ -245,7 +246,7 @@ function renderRegister(){
    '<label class="f">ニックネーム（ノートに表示）<input type="text" id="r-nick" maxlength="20"></label>'+
    '<label class="f">店舗<select id="r-store">'+Object.keys(S.me.stores).map(function(k){return '<option value="'+k+'">'+esc(S.me.stores[k])+'</option>';}).join('')+'</select></label>'+
    '<div class="f small">いまの時期</div><div class="chips" id="r-stage">'+Object.keys(STAGE).map(function(k,i){return '<button type="button" class="chip" data-stage="'+k+'" aria-pressed="'+(k==='mat')+'">'+STAGE[k]+'</button>';}).join('')+'</div>'+
-   '<label class="f" id="w-pre" hidden>妊活を始めた月<input type="month" id="r-pre"></label>'+
+   '<div id="w-pre" hidden><div class="row"><label class="f" style="flex:1">前回の生理が始まった日<input type="date" id="r-lp" max="'+today()+'"></label><label class="f" style="width:110px">周期（日）<input type="number" id="r-cyc" value="28" min="21" max="45"></label></div><div class="small">排卵日の目安を出すのに使います。わからなければ空欄でも大丈夫です</div></div>'+
    '<label class="f" id="w-edd">出産予定日<input type="date" id="r-edd"></label>'+
    '<label class="f" id="w-birth" hidden>出産日<input type="date" id="r-birth" max="'+today()+'"></label>'+
    '<label class="check" id="w-permit"><input type="checkbox" id="r-permit"><span>主治医から運動の許可を受けています</span></label>'+
@@ -258,7 +259,7 @@ function renderRegister(){
   $('r-go').onclick=function(){
     var btn=this; btn.disabled=true;
     api('register',{ name:$('r-name').value, nick:$('r-nick').value, store:$('r-store').value, stage:stage, edd:$('r-edd').value, birth:$('r-birth').value,
-      preStart:$('r-pre').value?$('r-pre').value+'-01':'', permit:$('r-permit').checked, consent:$('r-consent').checked }).then(function(r){
+      lastPeriod:$('r-lp').value, cycle:$('r-cyc').value, permit:$('r-permit').checked, consent:$('r-consent').checked }).then(function(r){
       btn.disabled=false;
       if(!r.ok){ $('r-err').innerHTML='<div class="err">'+esc(r.error)+'</div>'; return; }
       S.home=r.home; S.me.registered=true; toast('登録しました'); go('home');
@@ -274,7 +275,9 @@ function renderConsentAgain(){
 /* ---------- ホーム ---------- */
 function renderHome(){
   var h=S.home, top='';
-  if (h.stage==='pre') top='<div class="small">妊活中'+(h.preMonth?' ・ '+h.preMonth+'か月目':'')+'</div><div class="huge">体を整える<small>時期</small></div><div class="one">骨盤まわり・血流・睡眠のリズム</div>';
+  if (h.stage==='pre') top = h.ovulation ? '<div class="small">排卵日の目安</div><div class="huge">'+md(h.ovulation)+'<small>（'+wd(h.ovulation)+'）</small></div><div class="one">'+(h.toOvulation>0?'あと'+h.toOvulation+'日':h.toOvulation===0?'今日です':'過ぎました')+' ・ 次の生理の予定 '+md(h.nextPeriod)+'</div>'+
+      '<button class="btn sm" type="button" id="pd-today" style="margin-top:10px">今日、生理が来た</button><div class="small" style="margin-top:6px">周期から計算した目安です。基礎体温や検査薬と合わせてお使いください</div>'
+    : '<div class="small">妊活中</div><div class="huge" style="font-size:1.5rem">排卵日の目安を出す</div><div class="one">前回の生理が始まった日を入れてください</div><button class="btn sm pri" type="button" data-go="memo" style="margin-top:10px">入れる</button>';
   if (h.stage==='mat') top='<div class="small">予定日まで あと'+h.daysLeft+'日</div><div class="huge">'+h.week+'<small>週</small> '+h.day+'<small>日</small></div>';
   if (h.stage==='post') top='<div class="small">出産日 '+md(h.birth)+'</div><div class="huge">産後 '+h.months+'<small>か月</small> '+h.daysInMonth+'<small>日</small></div><div class="one">呼吸と骨盤底から、ゆっくり</div>';
   if (h.stage==='online') top='<div class="small">今週の運動</div><div class="huge">'+h.record.week+'<small>回</small> <span style="color:var(--mute);font-size:1rem">／'+h.goal+'回</span></div><div class="one">'+(h.record.week>=h.goal?'今週の目標を達成しました':'あと'+(h.goal-h.record.week)+'回で目標です')+'</div>'+
@@ -285,12 +288,14 @@ function renderHome(){
     html+='<div class="card"><h3>産後半年の計画</h3><div class="plan">'+POST_PLAN.map(function(p,i){ return '<div class="st'+(i<h.months?' done':i===h.months?' now':'')+'"><span class="when">'+p[0]+'</span><span>'+p[1]+(i===h.months?' <span class="tag acc">いまここ</span>':'')+'</span></div>'; }).join('')+'</div><div class="small" style="margin-top:6px">運動の目安です。体のことは健診で先生に確認してください</div></div>';
   }
   if (h.word) html+='<div class="card soft"><h3>今日の一言</h3><p>'+esc(h.word)+'</p></div>';
+  if (h.column) html+='<button type="button" class="card" data-column="home" style="text-align:left;font:inherit;color:inherit;cursor:pointer"><h3>今日のコラム</h3><b>'+esc(h.column.title)+'</b><div class="small" style="margin-top:4px">読む（約1分）</div></button>';
   if ((h.stage==='mat'||h.stage==='post') && !h.permit) html+='<div class="err">主治医の運動の許可がまだ確認できていません。許可を受けたら、メモ・設定から入れてください。</div>';
   html+='<div class="quick">'+(h.stage!=='online'?'<button type="button" class="ok" data-go="check"><span class="ic">'+ic('check')+'</span>今日の体調</button>':'<button type="button" data-go="log"><span class="ic">'+ic('bar')+'</span>記録する</button>')+
     '<button type="button" data-go="find"><span class="ic">'+ic('search')+'</span>さがす</button><button type="button" data-go="reserve"><span class="ic">'+ic('cal')+'</span>予約</button></div>';
   html+='<div class="card"><h3>次の予約</h3>'+(h.next?'<div class="row"><b>'+md(h.next.start)+'（'+wd(h.next.start)+'）'+hm(h.next.start)+' '+esc(h.next.kind)+'</b><button class="btn sm" type="button" data-go="reserve" style="margin-left:auto">変更</button></div>':'<div class="row"><span class="small">まだありません</span><button class="btn sm" type="button" data-go="reserve" style="margin-left:auto">予約する</button></div>')+'</div>';
   html+='<div class="card"><h3>やること</h3><div id="todos">'+todosHtml(h.todos)+'</div><div class="cm-in"><input type="text" id="todo-new" placeholder="やることを足す"><button class="btn sm" type="button" id="todo-add">足す</button></div></div>';
   $('main').innerHTML=html;
+  if ($('pd-today')) $('pd-today').onclick=function(){ api('period',{date:today(),cycle:h.cycle}).then(function(r){ if(!r.ok) return toast(r.error); S.home=r.home; toast('記録しました'); renderHome(); }); };
   $('todo-add').onclick=function(){ var v=$('todo-new').value; if(!v) return; api('todoAdd',{text:v}).then(function(r){ if(!r.ok) return toast(r.error); h.todos.push(r.todo); $('todos').innerHTML=todosHtml(h.todos); $('todo-new').value=''; }); };
 }
 function todosHtml(t){ return t.length? t.map(function(x){ return '<label class="todo"><input type="checkbox" data-todo="'+esc(x.id)+'"'+(x.done?' checked':'')+'><span>'+esc(x.text)+'</span><span class="by">'+esc(x.by)+'</span></label>'; }).join('') : '<div class="small">今はありません</div>'; }
@@ -318,17 +323,23 @@ function renderFind(){
   var main=$('main'); main.innerHTML='<div class="card center small">読み込んでいます…</div>';
   api('contents').then(function(r){
     if(!r.ok) return main.innerHTML='<div class="err">'+esc(r.error)+'</div>';
-    var list=r.list, f=S.filter, periods=uniq(list.map(function(c){return c.period;})), concerns=uniq(list.map(function(c){return c.concern;}));
+    var list=r.list, f=S.filter, vids=list.filter(function(c){return c.kind!=='コラム';}), periods=uniq(vids.map(function(c){return c.period;})), concerns=uniq(vids.map(function(c){return c.concern;}));
     function draw(){
-      var shown=list.filter(function(c){ return (!f.period||c.period===f.period)&&(!f.concern||c.concern===f.concern); });
+      var shown=list.filter(function(c){ return c.kind!=='コラム'&&(!f.period||c.period===f.period)&&(!f.concern||c.concern===f.concern); });
+      var cols=list.filter(function(c){ return c.kind==='コラム'; }); S.columns=cols;
       main.innerHTML='<div class="card"><h3>'+(S.home.stage==='online'?'部位':'時期')+'</h3><div class="chips" data-f="'+(S.home.stage==='online'?'concern':'period')+'">'+chips(S.home.stage==='online'?concerns:periods, S.home.stage==='online'?f.concern:f.period)+'</div>'+
         (S.home.stage!=='online'?'<h3 style="margin-top:10px">お悩み</h3><div class="chips" data-f="concern">'+chips(concerns,f.concern)+'</div>':'')+'</div>'+
-        '<div class="list">'+(shown.length?shown.map(function(c){ return '<a class="item" href="'+esc(c.url)+'" target="_blank" rel="noopener" data-watch="'+esc(c.id)+'"><div class="th">'+esc(c.min)+'分</div><div><b>'+esc(c.title)+'</b><span class="s">'+esc(c.kind)+' ・ '+esc(c.level||'')+'</span></div></a>'; }).join(''):'<div class="card small center">まだありません。布村さんが確認した動画から順に増えます</div>')+'</div>';
+        '<div class="list">'+(shown.length?shown.map(function(c){ return '<a class="item" href="'+esc(c.url)+'" target="_blank" rel="noopener" data-watch="'+esc(c.id)+'"><div class="th">'+esc(c.min)+'分</div><div><b>'+esc(c.title)+'</b><span class="s">'+esc(c.kind)+' ・ '+esc(c.level||'')+'</span></div></a>'; }).join(''):'<div class="card small center">まだありません。布村さんが確認した動画から順に増えます</div>')+'</div>'+
+        (cols.length?'<div class="card"><h3>コラム</h3><div class="list">'+cols.map(function(c,i){ return '<button type="button" class="item" data-column="'+i+'" style="font:inherit;text-align:left;cursor:pointer"><div class="th">読む</div><div><b>'+esc(c.title)+'</b><span class="s">'+esc(c.period||'')+'</span></div></button>'; }).join('')+'</div></div>':'');
     }
     function chips(arr,cur){ return '<button class="chip" type="button" data-v="" aria-pressed="'+(!cur)+'">すべて</button>'+arr.map(function(v){ return '<button class="chip" type="button" data-v="'+esc(v)+'" aria-pressed="'+(cur===v)+'">'+esc(v)+'</button>'; }).join(''); }
     main.onclick=function(e){ var c=e.target.closest('.chip'); if(!c) return; f[c.parentNode.dataset.f]=c.dataset.v; draw(); };
     draw();
   });
+}
+function renderColumn(c){
+  $('main').innerHTML='<div class="card"><h3>コラム</h3><div style="font-size:1.15rem;font-weight:700;line-height:1.5">'+esc(c.title)+'</div><p class="prose" style="margin-top:10px;line-height:1.9">'+esc(c.body)+'</p><div class="small" style="margin-top:10px">出典：'+esc(c.source||'')+'</div><div class="small">体のことは主治医に相談してください。</div></div><button type="button" class="btn wide" data-go="'+(S.screen||'home')+'">もどる</button>';
+  window.scrollTo(0,0);
 }
 function uniq(a){ var o=[]; a.forEach(function(v){ if(v&&o.indexOf(v)<0) o.push(v); }); return o; }
 
@@ -386,7 +397,7 @@ function renderReserve(){
 /* ---------- メモ・設定 ---------- */
 function renderMemo(){
   var h=S.home, sw='';
-  if (h.stage==='pre') sw='<label class="f">出産予定日<input type="date" id="st-edd"></label><label class="check"><input type="checkbox" id="st-permit"><span>主治医から運動の許可を受けています</span></label><button class="btn pri wide" type="button" data-stage-to="mat">妊娠中に切り替える</button>';
+  if (h.stage==='pre') sw='<div class="row"><label class="f" style="flex:1">前回の生理が始まった日<input type="date" id="st-lp" max="'+today()+'" value="'+(h.lastPeriod?h.lastPeriod.slice(0,10):'')+'"></label><label class="f" style="width:110px">周期（日）<input type="number" id="st-cyc" min="21" max="45" value="'+(h.cycle||28)+'"></label></div><button class="btn" type="button" id="st-pd">生理の記録を保存</button><hr style="border:0;border-top:1px solid var(--line);margin:6px 0">'+'<div class="small">妊娠がわかったら</div><label class="f">出産予定日<input type="date" id="st-edd"></label><label class="check"><input type="checkbox" id="st-permit"><span>主治医から運動の許可を受けています</span></label><button class="btn pri wide" type="button" data-stage-to="mat">妊娠中に切り替える</button>';
   if (h.stage==='mat') sw='<div class="switch"><span>出産予定日</span><b>'+md(h.edd)+'</b></div><label class="f">出産日<input type="date" id="st-birth" max="'+today()+'"></label><label class="check"><input type="checkbox" id="st-permit"><span>産後の運動について、先生のOKを受けています</span></label><button class="btn pri wide" type="button" data-stage-to="post">産後に切り替える</button>';
   if (h.stage==='post') sw='<div class="switch"><span>出産日</span><b>'+md(h.birth)+'</b></div><button class="btn wide" type="button" data-stage-to="online">オンラインに切り替える</button>';
   if (h.stage==='online') sw='<label class="switch"><span>1週間の運動目標</span><select id="st-goal" style="max-width:110px">'+[1,2,3,4,5,6,7].map(function(n){return '<option value="'+n+'"'+(n===h.goal?' selected':'')+'>'+n+'回</option>';}).join('')+'</select></label>';
@@ -396,6 +407,7 @@ function renderMemo(){
     '<div class="card"><label class="switch"><span>お知らせをしばらく止める</span><input type="checkbox" id="st-mute"'+(h.mute?' checked':'')+'></label><p class="small">理由は聞きません。ご希望があれば担当スタッフからご連絡します。</p></div>';
   $('mm-go').onclick=function(){ api('memo',{text:$('mm-text').value,share:$('mm-share').checked}).then(function(r){ if(!r.ok) return toast(r.error); h.memo={text:$('mm-text').value,share:$('mm-share').checked}; toast('保存しました'); }); };
   $('st-mute').onchange=function(){ api('setMute',{on:this.checked}).then(function(){ toast('保存しました'); }); };
+  if ($('st-pd')) $('st-pd').onclick=function(){ api('period',{date:$('st-lp').value,cycle:$('st-cyc').value}).then(function(r){ if(!r.ok) return toast(r.error); S.home=r.home; toast('保存しました'); go('home'); }); };
   if ($('st-goal')) $('st-goal').onchange=function(){ setGoal(+this.value); };
   if ($('pm-go')) $('pm-go').onclick=function(){ if(!$('pm-ok').checked) return; api('setStage',{stage:h.stage,edd:h.edd?h.edd.slice(0,10):'',birth:h.birth?h.birth.slice(0,10):'',permit:true}).then(function(r){ if(!r.ok) return toast(r.error); S.home=r.home; toast('保存しました'); go('home'); }); };
 }
@@ -445,6 +457,7 @@ document.addEventListener('click', function(e){
   if (!t.closest('#menu') && !$('menu').hidden) menu(false);
   var g=t.closest('[data-go]'); if(g) return go(g.dataset.go);
   var x;
+  if ((x=t.closest('[data-column]'))) return renderColumn(x.dataset.column==='home'?S.home.column:S.columns[+x.dataset.column]);
   if ((x=t.closest('[data-goal]'))) return setGoal(S.home.goal + (+x.dataset.goal));
   if ((x=t.closest('[data-like]'))) return api('like',{postId:x.dataset.like}).then(function(r){ if(r.ok){ x.textContent='いいね '+r.likes; x.setAttribute('aria-pressed','true'); } });
   if ((x=t.closest('[data-report]'))) return api('report',{postId:x.dataset.report}).then(function(r){ toast(r.ok?'スタッフに知らせました':r.error); if(r.ok) renderNote(); });
